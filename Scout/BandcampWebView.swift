@@ -2,133 +2,171 @@ import SwiftUI
 import WebKit
 
 struct BandcampWebView: NSViewRepresentable {
-    @Binding var urlString: String
-    @Binding var canGoBack: Bool
-    @Binding var canGoForward: Bool
-    @Binding var action: WebViewAction
+    let urlString: String
+    @ObservedObject var state: PlayerState
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(self)
+        Coordinator(state: state)
     }
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
-        config.userContentController.addUserScript(nowPlayingScript)
+        config.userContentController.addUserScript(Self.metadataScript)
         config.userContentController.add(context.coordinator, name: "nowPlaying")
-        config.userContentController.add(context.coordinator, name: "playerState")
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         // Identify as Safari so Bandcamp serves the full desktop player
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-        webView.allowsBackForwardNavigationGestures = true
 
         context.coordinator.webView = webView
-        load(url: urlString, in: webView)
+        load(urlString, in: webView)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        // Handle navigation actions triggered from the toolbar
-        if action != .none {
-            switch action {
-            case .goBack:    webView.goBack()
-            case .goForward: webView.goForward()
-            case .reload:    webView.reload()
-            case .none:      break
-            }
-            DispatchQueue.main.async { self.action = .none }
-            return
-        }
-
-        // Navigate when the URL binding changes externally
         if webView.url?.absoluteString != urlString {
-            load(url: urlString, in: webView)
+            load(urlString, in: webView)
         }
     }
 
-    private func load(url raw: String, in webView: WKWebView) {
+    private func load(_ raw: String, in webView: WKWebView) {
         guard let url = URL(string: raw) else { return }
         webView.load(URLRequest(url: url))
     }
 
     // MARK: - Injected JavaScript
 
-    private var nowPlayingScript: WKUserScript {
-        let source = """
+    private static let metadataScript: WKUserScript = {
+        let source = #"""
         (function() {
-            var lastTitle = '';
+            var lastKey = '';
 
-            function extractTrackInfo() {
-                var title   = document.querySelector('.title-section .trackTitle')?.textContent?.trim()
-                           ?? document.querySelector('h2.trackTitle')?.textContent?.trim()
-                           ?? (document.title?.split(' | ')[0]?.trim());
-                var artist  = document.querySelector('.title-section .artist a')?.textContent?.trim()
-                           ?? document.querySelector('#band-name-location span.title')?.textContent?.trim()
-                           ?? (document.title?.split(' | ')[1]?.trim());
-                var album   = document.querySelector('.title-section .album a')?.textContent?.trim() ?? '';
+            function pull() {
+                var title = document.querySelector('.current_track .track-title')?.textContent?.trim()
+                         || document.querySelector('tr.current_track .title-col .track-title')?.textContent?.trim()
+                         || document.querySelector('.title-section .trackTitle')?.textContent?.trim()
+                         || document.querySelector('h2.trackTitle')?.textContent?.trim()
+                         || (document.title?.split(' | ')[0]?.trim()) || '';
 
-                if (title && title !== lastTitle) {
-                    lastTitle = title;
+                var artist = document.querySelector('.title-section .artist a')?.textContent?.trim()
+                          || document.querySelector('#band-name-location span.title')?.textContent?.trim()
+                          || (document.title?.split(' | ')[1]?.trim()) || '';
+
+                var album = document.querySelector('.title-section .album a')?.textContent?.trim() || '';
+
+                var art = document.querySelector('#tralbumArt img')?.src
+                       || document.querySelector('a.popupImage img')?.src
+                       || document.querySelector('meta[property="og:image"]')?.content
+                       || '';
+
+                var audio = document.querySelector('audio');
+                var isPlaying = audio ? !audio.paused && !audio.ended : false;
+
+                if (!title) { return; }
+
+                var key = title + '|' + isPlaying + '|' + art;
+                if (key !== lastKey) {
+                    lastKey = key;
                     window.webkit.messageHandlers.nowPlaying.postMessage({
-                        title:  title  ?? '',
-                        artist: artist ?? '',
-                        album:  album  ?? ''
+                        title:     title,
+                        artist:    artist,
+                        album:     album,
+                        artwork:   art,
+                        isPlaying: isPlaying
                     });
                 }
             }
 
-            setInterval(extractTrackInfo, 1500);
-            extractTrackInfo();
+            setInterval(pull, 750);
+            pull();
         })();
-        """
+        """#
         return WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
-    }
+    }()
 
     // MARK: - Coordinator
 
     class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-        var parent: BandcampWebView
+        let state: PlayerState
         weak var webView: WKWebView?
+        private var observers: [NSObjectProtocol] = []
+        private var didAutoPlay = false
 
-        init(_ parent: BandcampWebView) {
-            self.parent = parent
+        init(state: PlayerState) {
+            self.state = state
+            super.init()
+            observe(.scoutPlayPause, js: Self.playPauseJS)
+            observe(.scoutNextTrack, js: Self.nextJS)
+            observe(.scoutPreviousTrack, js: Self.prevJS)
+        }
+
+        deinit {
+            observers.forEach(NotificationCenter.default.removeObserver)
+        }
+
+        private func observe(_ name: Notification.Name, js: String) {
+            let token = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.webView?.evaluateJavaScript(js, completionHandler: nil)
+            }
+            observers.append(token)
+        }
+
+        // Bandcamp's DOM varies by page; try each selector in order.
+        private static let playPauseJS = clickJS([".playbutton", "button.play-btn", "[data-bind*=\"playPause\"]"])
+        private static let nextJS      = clickJS([".nextbutton", "button[aria-label=\"Next track\"]"])
+        private static let prevJS      = clickJS([".prevbutton", "button[aria-label=\"Previous track\"]"])
+
+        private static func clickJS(_ selectors: [String]) -> String {
+            let list = selectors.map { "'\($0)'" }.joined(separator: ",")
+            return """
+            (function() {
+                var sels = [\(list)];
+                for (var i = 0; i < sels.length; i++) {
+                    var el = document.querySelector(sels[i]);
+                    if (el) { el.click(); return; }
+                }
+            })();
+            """
         }
 
         // MARK: WKNavigationDelegate
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            DispatchQueue.main.async {
-                if let url = webView.url?.absoluteString {
-                    self.parent.urlString = url
-                }
-                self.parent.canGoBack    = webView.canGoBack
-                self.parent.canGoForward = webView.canGoForward
+            guard !didAutoPlay else { return }
+            didAutoPlay = true
+            // The Bandcamp player needs a moment to initialize before .playbutton is clickable.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak webView] in
+                webView?.evaluateJavaScript(Self.playPauseJS, completionHandler: nil)
             }
-        }
-
-        // Allow Bandcamp's own redirects and pop-ups
-        func webView(
-            _ webView: WKWebView,
-            decidePolicyFor action: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
-        ) {
-            decisionHandler(.allow)
         }
 
         // MARK: WKScriptMessageHandler
 
-        func userContentController(
-            _ userContentController: WKUserContentController,
-            didReceive message: WKScriptMessage
-        ) {
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == "nowPlaying",
-                  let body = message.body as? [String: String] else { return }
+                  let body = message.body as? [String: Any] else { return }
+
+            let title     = body["title"]     as? String ?? ""
+            let artist    = body["artist"]    as? String ?? ""
+            let album     = body["album"]     as? String ?? ""
+            let artwork   = body["artwork"]   as? String ?? ""
+            let isPlaying = body["isPlaying"] as? Bool   ?? false
+
+            DispatchQueue.main.async {
+                self.state.title      = title
+                self.state.artist     = artist
+                self.state.album      = album
+                self.state.artworkURL = URL(string: artwork)
+                self.state.isPlaying  = isPlaying
+            }
+
             NowPlayingManager.shared.update(
-                title:  body["title"],
-                artist: body["artist"],
-                album:  body["album"]
+                title:      title,
+                artist:     artist,
+                album:      album,
+                artworkURL: URL(string: artwork)
             )
         }
     }

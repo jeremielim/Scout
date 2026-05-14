@@ -1,0 +1,32 @@
+name: Scout
+options:
+  bundleIdPrefix: com.jeremie
+  deploymentTarget:
+    macOS: "13.0"
+targets:
+  Scout:
+    type: application
+    platform: macOS
+    sources:
+      - Scout
+    info:
+      path: Scout/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleName: Scout
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
+        NSHumanReadableCopyright: ""
+    entitlements:
+      path: Scout/Scout.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jeremie.scout
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "5.0"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"

@@ -1,65 +1,34 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var currentURL = "https://bandcamp.com"
-    @State private var inputURL = "https://bandcamp.com"
-    @State private var canGoBack = false
-    @State private var canGoForward = false
-    @State private var webViewAction: WebViewAction = .none
+    @StateObject private var state = PlayerState()
+    @State private var inputURL: String = ""
+    @State private var loadedURL: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            BandcampWebView(
-                urlString: $currentURL,
-                canGoBack: $canGoBack,
-                canGoForward: $canGoForward,
-                action: $webViewAction
-            )
-        }
-        .onChange(of: currentURL) { _, url in
-            inputURL = url
-        }
-    }
-
-    private var toolbar: some View {
-        HStack(spacing: 8) {
-            Button(action: { webViewAction = .goBack }) {
-                Image(systemName: "chevron.left")
+        ZStack {
+            if loadedURL != nil {
+                MiniPlayerView(state: state)
+            } else {
+                URLInputView(input: $inputURL, onSubmit: submit)
             }
-            .disabled(!canGoBack)
-            .buttonStyle(.plain)
 
-            Button(action: { webViewAction = .goForward }) {
-                Image(systemName: "chevron.right")
+            // The web view stays mounted so audio keeps playing; it's invisible
+            // and ignores hits — the mini player drives playback over the JS bridge.
+            if let url = loadedURL {
+                BandcampWebView(urlString: url, state: state)
+                    .frame(width: 1024, height: 720)
+                    .opacity(0)
+                    .offset(x: -1400, y: -900)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
-            .disabled(!canGoForward)
-            .buttonStyle(.plain)
-
-            TextField("bandcamp.com", text: $inputURL)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { navigate(to: inputURL) }
-
-            Button("Go") { navigate(to: inputURL) }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 
-    private func navigate(to raw: String) {
-        var url = raw.trimmingCharacters(in: .whitespaces)
-        if !url.contains(".") {
-            url = "https://bandcamp.com/search?q=\(url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? url)"
-        } else if !url.hasPrefix("http") {
-            url = "https://\(url)"
-        }
-        currentURL = url
+    private func submit() {
+        let raw = inputURL.trimmingCharacters(in: .whitespaces)
+        guard !raw.isEmpty else { return }
+        loadedURL = raw.hasPrefix("http") ? raw : "https://\(raw)"
     }
-}
-
-enum WebViewAction: Equatable {
-    case none, goBack, goForward, reload
 }

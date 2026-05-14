@@ -41,12 +41,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1024, height: 720),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 520),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window?.title = "Scout"
+        window?.titleVisibility = .hidden
         window?.titlebarAppearsTransparent = true
         window?.isMovableByWindowBackground = true
         window?.center()
