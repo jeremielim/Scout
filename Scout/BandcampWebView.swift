@@ -91,9 +91,44 @@ struct BandcampWebView: NSViewRepresentable {
     class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var parent: BandcampWebView
         weak var webView: WKWebView?
+        private var observers: [NSObjectProtocol] = []
 
         init(_ parent: BandcampWebView) {
             self.parent = parent
+            super.init()
+            observe(.scoutPlayPause, js: Self.playPauseJS)
+            observe(.scoutNextTrack, js: Self.nextJS)
+            observe(.scoutPreviousTrack, js: Self.prevJS)
+        }
+
+        deinit {
+            observers.forEach(NotificationCenter.default.removeObserver)
+        }
+
+        private func observe(_ name: Notification.Name, js: String) {
+            let token = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.webView?.evaluateJavaScript(js, completionHandler: nil)
+            }
+            observers.append(token)
+        }
+
+        // Try a series of selectors in order; click the first match. Bandcamp's DOM
+        // varies by page (album, discover, collection), so fallbacks matter.
+        private static let playPauseJS = clickJS([".playbutton", "button.play-btn", "[data-bind*=\"playPause\"]"])
+        private static let nextJS      = clickJS([".nextbutton", "button[aria-label=\"Next track\"]"])
+        private static let prevJS      = clickJS([".prevbutton", "button[aria-label=\"Previous track\"]"])
+
+        private static func clickJS(_ selectors: [String]) -> String {
+            let list = selectors.map { "'\($0)'" }.joined(separator: ",")
+            return """
+            (function() {
+                var sels = [\(list)];
+                for (var i = 0; i < sels.length; i++) {
+                    var el = document.querySelector(sels[i]);
+                    if (el) { el.click(); return; }
+                }
+            })();
+            """
         }
 
         // MARK: WKNavigationDelegate

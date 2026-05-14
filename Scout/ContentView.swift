@@ -18,7 +18,7 @@ struct ContentView: View {
                 action: $webViewAction
             )
         }
-        .onChange(of: currentURL) { _, url in
+        .onChange(of: currentURL) { url in
             inputURL = url
         }
     }
