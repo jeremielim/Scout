@@ -80,4 +80,5 @@ extension Notification.Name {
     static let scoutPlayPause     = Notification.Name("scoutPlayPause")
     static let scoutNextTrack     = Notification.Name("scoutNextTrack")
     static let scoutPreviousTrack = Notification.Name("scoutPreviousTrack")
+    static let scoutVolumeChange  = Notification.Name("scoutVolumeChange")
 }
