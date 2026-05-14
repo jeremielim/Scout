@@ -35,6 +35,26 @@ struct MiniPlayerView: View {
                 }
             }
             .padding(.top, 4)
+
+            HStack(spacing: 8) {
+                Button { state.toggleMute() } label: {
+                    Image(systemName: state.volume == 0 ? "speaker.slash.fill" : "speaker.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Slider(value: Binding(
+                    get: { Double(state.volume) },
+                    set: { state.volume = Float($0) }
+                ), in: 0...1)
+                Image(systemName: "speaker.wave.3.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: 240)
+            .padding(.top, 2)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -64,6 +84,7 @@ struct MiniPlayerView: View {
                 .foregroundStyle(.secondary)
         }
     }
+
 }
 
 private struct ControlButton: View {

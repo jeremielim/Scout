@@ -100,6 +100,14 @@ struct BandcampWebView: NSViewRepresentable {
             observe(.scoutPlayPause, js: Self.playPauseJS)
             observe(.scoutNextTrack, js: Self.nextJS)
             observe(.scoutPreviousTrack, js: Self.prevJS)
+
+            let volumeToken = NotificationCenter.default.addObserver(forName: .scoutVolumeChange, object: nil, queue: .main) { [weak self] note in
+                guard let value = note.object as? Float else { return }
+                let clamped = max(0, min(1, value))
+                let js = "(function(){var a=document.querySelector('audio'); if(a){a.volume=\(clamped);}})();"
+                self?.webView?.evaluateJavaScript(js, completionHandler: nil)
+            }
+            observers.append(volumeToken)
         }
 
         deinit {
@@ -137,8 +145,11 @@ struct BandcampWebView: NSViewRepresentable {
             guard !didAutoPlay else { return }
             didAutoPlay = true
             // The Bandcamp player needs a moment to initialize before .playbutton is clickable.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak webView] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak webView, weak self] in
                 webView?.evaluateJavaScript(Self.playPauseJS, completionHandler: nil)
+                if let volume = self?.state.volume {
+                    NotificationCenter.default.post(name: .scoutVolumeChange, object: volume)
+                }
             }
         }
 
