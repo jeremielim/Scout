@@ -27,6 +27,7 @@ struct BandcampWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         if webView.url?.absoluteString != urlString {
+            context.coordinator.prepareForNewLoad()
             load(urlString, in: webView)
         }
     }
@@ -83,7 +84,7 @@ struct BandcampWebView: NSViewRepresentable {
             pull();
         })();
         """#
-        return WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        return WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
     }()
 
     // MARK: - Coordinator
@@ -119,6 +120,10 @@ struct BandcampWebView: NSViewRepresentable {
                 self?.webView?.evaluateJavaScript(js, completionHandler: nil)
             }
             observers.append(token)
+        }
+
+        func prepareForNewLoad() {
+            didAutoPlay = false
         }
 
         // Bandcamp's DOM varies by page; try each selector in order.

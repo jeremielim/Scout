@@ -31,4 +31,12 @@ final class PlayerState: ObservableObject {
             volume = preMuteVolume > 0 ? preMuteVolume : 1.0
         }
     }
+
+    func resetTrack() {
+        title = ""
+        artist = ""
+        album = ""
+        artworkURL = nil
+        isPlaying = false
+    }
 }

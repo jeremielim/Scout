@@ -37,6 +37,18 @@ class NowPlayingManager {
         update(title: "Scout", artist: "Bandcamp", album: nil, artworkURL: nil)
     }
 
+    func reset() {
+        artworkTask?.cancel()
+        artworkTask = nil
+        lastArtworkURL = nil
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+            MPMediaItemPropertyTitle:           "Scout",
+            MPMediaItemPropertyArtist:          "Bandcamp",
+            MPMediaItemPropertyAlbumTitle:      "",
+            MPNowPlayingInfoPropertyMediaType:  MPNowPlayingInfoMediaType.audio.rawValue,
+        ]
+    }
+
     func update(title: String?, artist: String?, album: String?, artworkURL: URL?) {
         var info: [String: Any] = [
             MPMediaItemPropertyTitle:           title  ?? "Unknown Track",

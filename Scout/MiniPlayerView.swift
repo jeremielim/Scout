@@ -2,6 +2,9 @@ import SwiftUI
 
 struct MiniPlayerView: View {
     @ObservedObject var state: PlayerState
+    @Binding var inputURL: String
+    @Binding var isReplacingURL: Bool
+    let onSubmitURL: () -> Void
 
     var body: some View {
         VStack(spacing: 18) {
@@ -10,18 +13,30 @@ struct MiniPlayerView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .shadow(radius: 8, y: 4)
 
-            VStack(spacing: 2) {
-                Text(state.title.isEmpty ? "Loading…" : state.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(state.artist)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+            if isReplacingURL {
+                VStack(spacing: 8) {
+                    TextField("https://artist.bandcamp.com/album/...", text: $inputURL)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(onSubmitURL)
+                    Button("Replace", action: onSubmitURL)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(inputURL.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .frame(maxWidth: 280)
+            } else {
+                VStack(spacing: 2) {
+                    Text(state.title.isEmpty ? "Loading…" : state.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(state.artist)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .frame(maxWidth: 280)
             }
-            .frame(maxWidth: 280)
 
             HStack(spacing: 36) {
                 ControlButton(symbol: "backward.fill", size: 22) {
@@ -58,6 +73,19 @@ struct MiniPlayerView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topTrailing) {
+            Button {
+                isReplacingURL.toggle()
+            } label: {
+                Image(systemName: isReplacingURL ? "xmark" : "link")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isReplacingURL ? "Cancel URL replacement" : "Replace URL")
+            .padding(14)
+        }
     }
 
     @ViewBuilder
